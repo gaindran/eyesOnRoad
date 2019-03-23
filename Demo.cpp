@@ -35,6 +35,8 @@ std::string vFileWOext;  // Global var. :video filename without extension
 std::string dirName;     // Global var. parameter 2: user defined directory name for snapshots
 std::string outputTxtFile; // Global var.  parameter3 : user defined filename of output text file
 double fps;
+int frameWidth;
+int frameHeight;
 int preprocess(int argc, char ** argv)
 {
   if(argc < 2)
@@ -125,6 +127,8 @@ int main(int argc, char ** argv)
   bool f_takeSnapshot2 = false;  // flag for time to take 2nd snapshot at next frame
   std::string answer;
   fps = 0;
+  frameWidth = 0;
+  frameHeight =0;
   std::cout << "Using OpenCV " << CV_MAJOR_VERSION << "." << CV_MINOR_VERSION << "." << CV_SUBMINOR_VERSION << std::endl;
   /* Prepare for tesseract */
   tesseract::TessBaseAPI *api = new tesseract::TessBaseAPI();
@@ -139,7 +143,9 @@ int main(int argc, char ** argv)
   else
   {
     fps = cvGetCaptureProperty(capture, cv::CAP_PROP_FPS);
-    std::cout << "fps of " << argv[1] <<  " is :" << fps << std::endl;
+    frameWidth =  round(cvGetCaptureProperty(capture, cv::CAP_PROP_FRAME_WIDTH) );
+    frameHeight = round(cvGetCaptureProperty(capture, cv::CAP_PROP_FRAME_HEIGHT));
+    std::cout << " - fps of " << argv[1] <<  "(" << frameWidth  << "*" << frameHeight << ") is " << fps << std::endl;
   }
   matchPlate mPlateAPI;
   /* Background Subtraction Algorithm */
@@ -158,15 +164,19 @@ int main(int argc, char ** argv)
   // std::cout << "Press 'q' to quit..." << std::endl;
   int key = 0;
   IplImage *frame;
+
   while(key != 'q')
   {
     i++;
     frame = cvQueryFrame(capture);
-    // if(!frame) break;
     if( ! frame) 
       break;
-    cv::Mat img_input = cv::cvarrToMat(frame);
-
+    cv::Mat img_origin = cv::cvarrToMat(frame);
+    cv::Mat img_input;
+    // using Quarter image for Vehicle Detection
+    // cv::resize(img_origin, img_input, cv::Size(frameWidth, frameHeight), 0.25, 0.25, CV_INTER_LINEAR );
+    cv::resize(img_origin, img_input, cv::Size(), 0.25, 0.25, 1);  // cause INTER_LINEAR result to ERROR, using 1 instead
+    // std::cout << "img_input size: " <<  img_input.size().width << "*" << img_input.size().height << "\r";
     // bgs->process(...) internally process and show the foreground mask image
     cv::Mat img_mask;
     bgs->process(img_input, img_mask);
@@ -187,10 +197,11 @@ int main(int argc, char ** argv)
       if(vehicleCouting->process())
       {
         truckCounter++;
-        cv::Mat img_copy;
-        img_input.copyTo(img_copy);
+        //// cv::Mat img_copy;
+        //// img_origin.copyTo(img_copy);  // Using origin image for OCR
         // std::cout << "img_copy size is " << img_copy.size().width << "*" << img_copy.size().height << "+" << img_copy.channels() << std::endl;
-        cv::Mat sub = img_copy(cv::Rect(1,401, img_copy.size().width/2, img_copy.size().height-401-1)); // origin is 1280*720
+        //// cv::Mat sub = img_copy(cv::Rect(1,401, img_copy.size().width/2, img_copy.size().height-401-1)); // origin is 1280*720
+        cv::Mat sub = img_origin(cv::Rect(1,401, img_origin.size().width/2, img_origin.size().height-401-1));
         // std::cout << "sub size is " << sub.size().width << "*" << sub.size().height << "+" << sub.channels() << std::endl;
 	// cv::imwrite("sub.jpg",sub);
 	mPlateAPI.setImage(sub);
@@ -205,7 +216,7 @@ int main(int argc, char ** argv)
 	    // std::cout << "plate size is" << plate.size().width << "*" << plate.size().height << std::endl;
             saveSnapshot(i, img_input);
             cv::Mat freshPlate = cv::Mat::zeros(plate.size(), plate.type());
-            plate.convertTo(freshPlate, -1, 2, 50);
+            plate.convertTo(freshPlate, -1, 1.06, 30);
             saveSnapshot(i-1, freshPlate);
 	    api->SetImage((uchar*)freshPlate.data, freshPlate.size().width, freshPlate.size().height, freshPlate.channels(), freshPlate.step1());
 	    char *outText = api->GetUTF8Text();   // get text in image
@@ -240,6 +251,7 @@ int main(int argc, char ** argv)
     fileIO << answer;
     fileIO.close();
   }
+  std::cout << " * Found " << truckCounter << " trucks and " << plateCounter << "plates. " << std::endl;
 
   delete vehicleCouting;
   delete blobTracking;
