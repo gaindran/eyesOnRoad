@@ -1,0 +1,5 @@
+## 20190310 integrate tesseract API in simple_vehicle_counting
+1. add include in Demo.cpp(for example)
+2. add 'tesseract' and 'letp' to build/CMakeLists.txt at target_link_library(... tesseract lept)
+## 20190310
+add checkSnapshot() to Vehicle_couting class, and inject f_snapshot flag to Demo.cpp
